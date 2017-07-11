@@ -4,13 +4,15 @@ sudo: false
 cache: ccache
 
 env:
-  global: BUILD_TYPE=Debug
+  global:
+    - BUILD_TYPE=Debug
+    - secure: AFu44R/HOnU/mth+TekGUkzpSbHfynRhApkg583RpXr4b65Zmd+osotLdDBPnRwiGEKDbIXGDubMdwcYki5O+ewvnbHgsen7b01IWObPTVWJbqfjZ8iFcx5thZlvE+bamxwGDv5jxmqvIRKW+UoWHIyYFN/DJkPHfYdkEm+gxzA+PLtUzugkhKCnArDL7GX4VDG20mfzb42kPWUUiuID+gzYtYCV+pj4ppFZ9Z5sPj7vnKkWLJjr5v85x8iPVSIWuyg+TraSdQ3FI4h+sMhMpiIlOoV68+YbC1YNmL/LyEHB4BUTg6/ABbSbqiCDOXZFcqKiwdeg9jSC4MEgVz8ki9omFfI6IL1cwMe1N2xlOFwf4ZFpsFopm/btOrfVsftv6oE7FdNTps/fMyFfyVZRvGWq3Bt2LMZIIkXrFohVX2zg+c2OXzmTRPW3tbplTRCaKgb4f+5axi/qvWsbNdUzhUW55XM9hIyJZ/gVMmo4Pr4euVg32SigfpjGKr/pmpOSW3ovf4e+wG831kdc2y0qAjn721hb/oh2zSSlWEgSUPl0OATvo1yCBPpVLpU5YlkFDKlkhRdgQ4VOOQeOCIlrzuWCQVJiuBfmVrmE1uk8ptzizneiHLXf1lBK2Ev4lnYVJfyM8ieTs1kvXYvUIOYkK9IkPQqlXxGTOenuAdPPPfI=
 compiler: gcc
 
 matrix:
   include:
     - env: PYTHON=2.7 GCC=5
-      addons:
+      addons: &gcc5
         apt:
           sources:
             - ubuntu-toolchain-r-test
@@ -18,23 +20,13 @@ matrix:
             - g++-5
 
     - env: PYTHON=3.4 GCC=5
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
+      addons: *gcc5
 
     - env: PYTHON=3.5 GCC=5
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
+      addons: *gcc5
 
     - env: PYTHON=3.6 GCC=5
-      addons:
+      addons: &gcc5-python36
         apt:
           sources:
             - ubuntu-toolchain-r-test
@@ -44,22 +36,10 @@ matrix:
             - python3.6-dev
 
     - env: PYTHON=2.7 GCC=5 BUILD_TYPE=Release
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
+      addons: *gcc5
 
     - env: PYTHON=3.6 GCC=5 BUILD_TYPE=Release
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - deadsnakes
-          packages:
-            - g++-5
-            - python3.6-dev
+      addons: *gcc5-python36
 
     - env: PYTHON=2.7 GCC=7
       addons:
@@ -111,22 +91,87 @@ matrix:
     - stage: wheels
       os: osx
       compiler: clang
+      install:
+        - PYTHON_VERSIONS="2.7.13 3.4.4 3.5.3 3.6.1"
+        - |
+          for PYTHON_VERSION in $PYTHON_VERSIONS; do
+            echo "=== Setting up Python $PYTHON_VERSION ==="
+
+            curl -L -o /tmp/Python.pkg "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-macosx10.6.pkg"
+            sudo installer -pkg /tmp/Python.pkg -target /
+
+            SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
+            PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
+
+            echo $SHORT_PYTHON_VERSION
+            echo $PYBIN
+            if [ ${PYTHON_VERSION%.*.*} == "3" ]; then
+              ln -s "$PYBIN/python3" "$PYBIN/python"
+              ln -s "$PYBIN/pip3" "$PYBIN/pip"
+            fi
+            "$PYBIN/pip" install --upgrade pip
+            "$PYBIN/pip" install wheel
+            "$PYBIN/pip" install delocate
+            echo
+          done
       script:
-        - pip install cibuildwheel
-        - export CCACHE_BASEDIR=`python -c "import tempfile; import os; print(os.path.realpath(tempfile.gettempdir()))"`
-        - CIBW_SKIP="cp26-*" cibuildwheel
+        - |
+          for PYTHON_VERSION in $PYTHON_VERSIONS; do
+            echo "=== Building wheel for Python $PYTHON_VERSION ==="
+
+            SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
+            PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
+
+            echo $SHORT_PYTHON_VERSION
+            echo $PYBIN
+            "$PYBIN/python" --version
+            "$PYBIN/python" setup.py bdist_wheel -d tmp
+            "$PYBIN/delocate-listdeps" tmp/*.whl
+            "$PYBIN/delocate-wheel" -w wheelhouse tmp/*.whl
+            rm tmp/*.whl
+            echo
+          done
+      before_deploy:
+        - |
+          echo "{
+            \"package\": {
+              \"name\": \"CI-Wheels\",
+              \"repo\": \"Parselmouth\",
+              \"subject\": \"yannickjadoul\"
+            },
+            \"version\": {
+                \"name\": \"$TRAVIS_BRANCH\",
+                \"desc\": \"$TRAVIS_COMMIT - $TRAVIS_COMMIT_MESSAGE\",
+                \"released\": \"`date -u +%Y-%m-%dT%H:%M:%S.000Z`\",
+                \"vcs_tag\": \"$TRAVIS_TAG\"
+            },
+            \"files\": [{\"includePattern\": \"wheelhouse/(.*)\", \"uploadPattern\": \"\$1\", \"matrixParams\": { \"override\": 1 }}],
+            \"publish\": true
+          }" > bintray.json
       deploy:
-        provider: releases
-        api_key:
-          secure: a/odACohfUh1T00U/v2T9TCiY4KRfgUwBsFJHf1mzmaphZIPwY8lLgYC1HvV7FD+ijrV9FQVxh+u5A+JbHlDSioW5LE5WXaB4KOYUphcCgoy47/FbyxJpQWNy62segip6/RDvKhpgHCc0Ii8qgXBSLtjyoiCRxbXyfX2u5EbD5fkU5Wip4o7Mqk2cp5NEXWx/u76SvOHH+zhueM2MkP4HvPSMI20jFs1vxb4VNK1EE++GdcZq3mwWFAJyPkuMVKxSF430Svm/qkE33btFQpdtAkUdh0jVu+tBD3RBOHvPAKab4uvDU2Pl5WFl+LYwyYKoZYQAIKVhGrwMbb5LlAaR0sfhq4YqT8HMqPBUPEOMo6OQ3zBoQER7QzHPQRFJBPptNMLtc3ugo0YdDc7bHlocDCah2TErlrzEzNxiC0vFCYv+hVSllWtQwMf56s/6LTQVxgska63tqUWbfA6M4yV37s9wJQsyrdlKnepJWdDDm1WxrZ0nhwxMN/tR+TmYi+tnDkY+JxPwBXyibg/ZARn+7spdjrKbE3uKFwQG2OqkJXiW3LOc7VDyK/s5mj1qJmHDTjTOlwyw5BDclkHAF3hvnci7BefkRRKpba01neFmoMHhdidhvvwLCxhEPTgGKW0rwUfMPJpElWJkjI1OmCpwyyEeOP0IOIZKmvdajsINJY=
-        file_glob: true
-        file: wheelhouse/*
-        skip_cleanup: true
-        on:
-          repo: YannickJadoul/Parselmouth
-          tags: true
+        - provider: releases
+          api_key:
+            secure: a/odACohfUh1T00U/v2T9TCiY4KRfgUwBsFJHf1mzmaphZIPwY8lLgYC1HvV7FD+ijrV9FQVxh+u5A+JbHlDSioW5LE5WXaB4KOYUphcCgoy47/FbyxJpQWNy62segip6/RDvKhpgHCc0Ii8qgXBSLtjyoiCRxbXyfX2u5EbD5fkU5Wip4o7Mqk2cp5NEXWx/u76SvOHH+zhueM2MkP4HvPSMI20jFs1vxb4VNK1EE++GdcZq3mwWFAJyPkuMVKxSF430Svm/qkE33btFQpdtAkUdh0jVu+tBD3RBOHvPAKab4uvDU2Pl5WFl+LYwyYKoZYQAIKVhGrwMbb5LlAaR0sfhq4YqT8HMqPBUPEOMo6OQ3zBoQER7QzHPQRFJBPptNMLtc3ugo0YdDc7bHlocDCah2TErlrzEzNxiC0vFCYv+hVSllWtQwMf56s/6LTQVxgska63tqUWbfA6M4yV37s9wJQsyrdlKnepJWdDDm1WxrZ0nhwxMN/tR+TmYi+tnDkY+JxPwBXyibg/ZARn+7spdjrKbE3uKFwQG2OqkJXiW3LOc7VDyK/s5mj1qJmHDTjTOlwyw5BDclkHAF3hvnci7BefkRRKpba01neFmoMHhdidhvvwLCxhEPTgGKW0rwUfMPJpElWJkjI1OmCpwyyEeOP0IOIZKmvdajsINJY=
+          file_glob: true
+          file: wheelhouse/*
+          skip_cleanup: true
+          on:
+            repo: YannickJadoul/Parselmouth
+            tags: true
+        - provider: bintray
+          file: bintray.json
+          user: YannickJadoul
+          key:
+            secure: an0RPZkTc9vqCe9mdik94fSImmnCsiZLmd6HPncfczfGWJdo5iEP9FbmdHMC47mnl+kNiHGS/3dyhGtkbtwAihGLOVfPjyTk4JXac7c4YwhYAvlzRWeKafti0Cg1lmdGlX1CUowDzpuKROiOqjeN4fYvKjVfCqNCVPvluQpkX/RVNAdzbNQggggSvh3Blf2WNVflGdd0RNUr1Z4gZGyH6DbkZ2zbOt7PRU0cYm2NEbgN/mKPGpoKK1voWrSa57r3DYo+nbtk76oTGnqK7j8E4pOxr0uUCSwAYj5cIoOlcErZICDyyNLULgROPv8oXqhpZ8HkyTOMkUK2Lniq9h5kwmkby9GiRFBtLMJTU9rAHTwmP9AdF2eKngQf69Tw/f9UqvDjpsoBxshoZecI+Wsf5IJ/qc8Zffx4lm7k4uHl+Y8fcXCi5VtqODtOwSa/KIkGSLIus4PKaTO++7jmUA/DKEhUgTQfosYdUUUm2lua3ZMJ1o62M73XFFUxn5G5NaR5G/mosgsoFcJ3vnejt+ljf7j5C7Du7Hx3gZDwMzhrYG2DJEoRUNEahJV4djFsiDyIhoyYSsuLr0jQnT3//f5uqSlMP7PE4f98NEQxixM4naZaizBggyyAXwvlFxqqmxJxDq5dZCVgJTc3dTeEgJCi/Q5vURZqWvXt/EeLyB7anO4=
+          on:
+            all_branches: true
+      after_deploy:
+        - BINTRAY_VERSION_INFO=`python -c "import json; print json.dumps(json.load(open(\"bintray.json\"))['version'])"`
+        - curl -X PATCH "https://api.bintray.com/packages/yannickjadoul/Parselmouth/CI-Wheels/versions/$TRAVIS_BRANCH" -u "yannickjadoul:$BINTRAY_API_KEY" --header "Content-Type:application/json" -d "$BINTRAY_VERSION_INFO"
 
 before_install:
+  - set -e
+  - if [ "$TRAVIS_BRANCH" == "appveyor" ]; then travis_terminate 0; fi
   - |
     if [ "$TRAVIS_OS_NAME" == "linux" ]; then
       if [ -n "$GCC" ]; then
@@ -140,6 +185,7 @@ before_install:
       fi
       PYTHON_CMD=python$PYTHON
     elif [ "$TRAVIS_OS_NAME" == "osx" ]; then
+      brew update > /dev/null
       brew install ccache
       export PATH=/usr/local/opt/ccache/libexec:$PATH
       if [ "$PYTHON" == "3" ]; then
