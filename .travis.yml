@@ -1,7 +1,10 @@
 language: cpp
 dist: trusty
 sudo: false
-cache: ccache
+cache:
+  ccache: true
+  directories:
+    - $HOME/Library/Caches/Homebrew
 
 env:
   global:
@@ -11,127 +14,128 @@ compiler: gcc
 
 matrix:
   include:
-    - env: PYTHON=2.7 GCC=5
-      addons: &gcc5
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
+    # - env: PYTHON=2.7 GCC=5
+    #   addons: &gcc5
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #       packages:
+    #         - g++-5
 
-    - env: PYTHON=3.4 GCC=5
-      addons: *gcc5
+    # - env: PYTHON=3.4 GCC=5
+    #   addons: *gcc5
 
-    - env: PYTHON=3.5 GCC=5
-      addons: *gcc5
+    # - env: PYTHON=3.5 GCC=5
+    #   addons: *gcc5
 
-    - env: PYTHON=3.6 GCC=5
-      addons: &gcc5-python36
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - deadsnakes
-          packages:
-            - g++-5
-            - python3.6-dev
+    # - env: PYTHON=3.6 GCC=5
+    #   addons: &gcc5-python36
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - deadsnakes
+    #       packages:
+    #         - g++-5
+    #         - python3.6-dev
 
-    - env: PYTHON=2.7 GCC=5 BUILD_TYPE=Release
-      addons: *gcc5
+    # - env: PYTHON=2.7 GCC=5 BUILD_TYPE=Release
+    #   addons: *gcc5
 
-    - env: PYTHON=3.6 GCC=5 BUILD_TYPE=Release
-      addons: *gcc5-python36
+    # - env: PYTHON=3.6 GCC=5 BUILD_TYPE=Release
+    #   addons: *gcc5-python36
 
-    - env: PYTHON=2.7 GCC=7
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
+    # - env: PYTHON=2.7 GCC=7
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #       packages:
+    #         - g++-7
 
-    - env: PYTHON=3.6 GCC=7
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - deadsnakes
-          packages:
-            - g++-7
-            - python3.6-dev
+    # - env: PYTHON=3.6 GCC=7
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - ubuntu-toolchain-r-test
+    #         - deadsnakes
+    #       packages:
+    #         - g++-7
+    #         - python3.6-dev
 
-    - env: PYTHON=2.7 CLANG=3.8
-      compiler: clang
-      addons:
-        apt:
-          packages:
-            - clang-3.8
-            - libc++-dev
+    # - env: PYTHON=2.7 CLANG=3.8
+    #   compiler: clang
+    #   addons:
+    #     apt:
+    #       packages:
+    #         - clang-3.8
+    #         - libc++-dev
 
-    - env: PYTHON=3.6 CLANG=3.8
-      compiler: clang
-      addons:
-        apt:
-          sources:
-            - deadsnakes
-          packages:
-            - clang-3.8
-            - libc++-dev
-            - python3.6-dev
+    # - env: PYTHON=3.6 CLANG=3.8
+    #   compiler: clang
+    #   addons:
+    #     apt:
+    #       sources:
+    #         - deadsnakes
+    #       packages:
+    #         - clang-3.8
+    #         - libc++-dev
+    #         - python3.6-dev
 
-    - env: PYTHON=2
-      os: osx
-      osx_image: xcode8.3
-      compiler: clang
+    # - env: PYTHON=2
+    #   os: osx
+    #   osx_image: xcode8.3
+    #   compiler: clang
 
-    - env: PYTHON=3
-      os: osx
-      osx_image: xcode8.3
-      compiler: clang
+    # - env: PYTHON=3
+    #   os: osx
+    #   osx_image: xcode8.3
+    #   compiler: clang
 
     - stage: wheels
-      os: osx
-      compiler: clang
+      os: linux
+      sudo: required
+      services:
+        - docker
       install:
-        - PYTHON_VERSIONS="2.7.13 3.4.4 3.5.3 3.6.1"
-        - |
-          for PYTHON_VERSION in $PYTHON_VERSIONS; do
-            echo "=== Setting up Python $PYTHON_VERSION ==="
-
-            curl -L -o /tmp/Python.pkg "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-macosx10.6.pkg"
-            sudo installer -pkg /tmp/Python.pkg -target /
-
-            SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
-            PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
-
-            echo $SHORT_PYTHON_VERSION
-            echo $PYBIN
-            if [ ${PYTHON_VERSION%.*.*} == "3" ]; then
-              ln -s "$PYBIN/python3" "$PYBIN/python"
-              ln -s "$PYBIN/pip3" "$PYBIN/pip"
-            fi
-            "$PYBIN/pip" install --upgrade pip
-            "$PYBIN/pip" install wheel
-            "$PYBIN/pip" install delocate
-            echo
-          done
+        - wget -q --no-check-certificate https://cmake.org/files/v2.8/cmake-2.8.12.2-Linux-i386.tar.gz -O cmake.tar.gz
+        - wget -q https://github.com/squeaky-pl/centos-devtools/releases/download/7.1/gcc-7.1.0-binutils-2.28-x86_64.tar.bz2 -O gcc.tar.bz2
+        - wget -q https://www.samba.org/ftp/ccache/ccache-3.3.4.tar.bz2 -O ccache.tar.bz2
+        - PYTHON_VERSIONS="cp27-cp27m cp27-cp27mu cp34-cp34m cp35-cp35m cp36-cp36m"
+        - docker pull quay.io/pypa/manylinux1_x86_64
+        # - docker pull quay.io/pypa/manylinux1_i686
       script:
         - |
+          SCRIPT="
+          set -e -x
+
+          echo \"=== Setting up docker environment ===\"
+          tar xzf /io/cmake.tar.gz -C /usr/local --strip-components=1
+          tar xjf /io/gcc.tar.bz2 -C /
+          tar xjf /io/ccache.tar.bz2 -C /
+          cd ccache-3.3.4 && ./configure && make install && cd ..
+
+          export PATH=\"/opt/devtools-7.1/bin:\$PATH\"
+          export CC=\"ccache gcc\"
+          export CXX=\"ccache g++\"
+          export CXXFLAGS=\"-static-libstdc++\"
+          export CCACHE_DIR=\"/ccache\"
+          echo
+
+          cd /io
           for PYTHON_VERSION in $PYTHON_VERSIONS; do
-            echo "=== Building wheel for Python $PYTHON_VERSION ==="
-
-            SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
-            PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
-
-            echo $SHORT_PYTHON_VERSION
-            echo $PYBIN
-            "$PYBIN/python" --version
-            "$PYBIN/python" setup.py bdist_wheel -d tmp
-            "$PYBIN/delocate-listdeps" tmp/*.whl
-            "$PYBIN/delocate-wheel" -w wheelhouse tmp/*.whl
-            rm tmp/*.whl
+            echo \"=== Building wheel for Python \$PYTHON_VERSION ===\"
+            PYBIN=\"/opt/python/\$PYTHON_VERSION/bin\"
+            \"\${PYBIN}/python\" --version
+            \"\${PYBIN}/python\" setup.py bdist_wheel -d tmp
+            auditwheel show tmp/*.whl
+            auditwheel repair tmp/*.whl -w wheelhouse
+            rm tmp/*
             echo
           done
-      before_deploy:
+          "
+        - echo "$SCRIPT" | docker run --rm -i -v "`pwd`:/io" -v "$HOME/.ccache:/ccache" quay.io/pypa/manylinux1_x86_64 /bin/bash
+        # - echo "$SCRIPT" | docker run --rm -i -v "`pwd`:/io" -v "$HOME/.ccache:/ccache" quay.io/pypa/manylinux1_i686 linux32 /bin/bash
+      before_deploy: &before_deploy-wheels
         - |
           echo "{
             \"package\": {
@@ -148,7 +152,7 @@ matrix:
             \"files\": [{\"includePattern\": \"wheelhouse/(.*)\", \"uploadPattern\": \"\$1\", \"matrixParams\": { \"override\": 1 }}],
             \"publish\": true
           }" > bintray.json
-      deploy:
+      deploy: &deploy-wheels
         - provider: releases
           api_key:
             secure: a/odACohfUh1T00U/v2T9TCiY4KRfgUwBsFJHf1mzmaphZIPwY8lLgYC1HvV7FD+ijrV9FQVxh+u5A+JbHlDSioW5LE5WXaB4KOYUphcCgoy47/FbyxJpQWNy62segip6/RDvKhpgHCc0Ii8qgXBSLtjyoiCRxbXyfX2u5EbD5fkU5Wip4o7Mqk2cp5NEXWx/u76SvOHH+zhueM2MkP4HvPSMI20jFs1vxb4VNK1EE++GdcZq3mwWFAJyPkuMVKxSF430Svm/qkE33btFQpdtAkUdh0jVu+tBD3RBOHvPAKab4uvDU2Pl5WFl+LYwyYKoZYQAIKVhGrwMbb5LlAaR0sfhq4YqT8HMqPBUPEOMo6OQ3zBoQER7QzHPQRFJBPptNMLtc3ugo0YdDc7bHlocDCah2TErlrzEzNxiC0vFCYv+hVSllWtQwMf56s/6LTQVxgska63tqUWbfA6M4yV37s9wJQsyrdlKnepJWdDDm1WxrZ0nhwxMN/tR+TmYi+tnDkY+JxPwBXyibg/ZARn+7spdjrKbE3uKFwQG2OqkJXiW3LOc7VDyK/s5mj1qJmHDTjTOlwyw5BDclkHAF3hvnci7BefkRRKpba01neFmoMHhdidhvvwLCxhEPTgGKW0rwUfMPJpElWJkjI1OmCpwyyEeOP0IOIZKmvdajsINJY=
@@ -165,9 +169,56 @@ matrix:
             secure: an0RPZkTc9vqCe9mdik94fSImmnCsiZLmd6HPncfczfGWJdo5iEP9FbmdHMC47mnl+kNiHGS/3dyhGtkbtwAihGLOVfPjyTk4JXac7c4YwhYAvlzRWeKafti0Cg1lmdGlX1CUowDzpuKROiOqjeN4fYvKjVfCqNCVPvluQpkX/RVNAdzbNQggggSvh3Blf2WNVflGdd0RNUr1Z4gZGyH6DbkZ2zbOt7PRU0cYm2NEbgN/mKPGpoKK1voWrSa57r3DYo+nbtk76oTGnqK7j8E4pOxr0uUCSwAYj5cIoOlcErZICDyyNLULgROPv8oXqhpZ8HkyTOMkUK2Lniq9h5kwmkby9GiRFBtLMJTU9rAHTwmP9AdF2eKngQf69Tw/f9UqvDjpsoBxshoZecI+Wsf5IJ/qc8Zffx4lm7k4uHl+Y8fcXCi5VtqODtOwSa/KIkGSLIus4PKaTO++7jmUA/DKEhUgTQfosYdUUUm2lua3ZMJ1o62M73XFFUxn5G5NaR5G/mosgsoFcJ3vnejt+ljf7j5C7Du7Hx3gZDwMzhrYG2DJEoRUNEahJV4djFsiDyIhoyYSsuLr0jQnT3//f5uqSlMP7PE4f98NEQxixM4naZaizBggyyAXwvlFxqqmxJxDq5dZCVgJTc3dTeEgJCi/Q5vURZqWvXt/EeLyB7anO4=
           on:
             all_branches: true
-      after_deploy:
+      after_deploy: &after_deploy-wheels
         - BINTRAY_VERSION_INFO=`python -c "import json; print json.dumps(json.load(open(\"bintray.json\"))['version'])"`
         - curl -X PATCH "https://api.bintray.com/packages/yannickjadoul/Parselmouth/CI-Wheels/versions/$TRAVIS_BRANCH" -u "yannickjadoul:$BINTRAY_API_KEY" --header "Content-Type:application/json" -d "$BINTRAY_VERSION_INFO"
+
+    # - stage: wheels
+    #   os: osx
+    #   compiler: clang
+    #   install:
+    #     - PYTHON_VERSIONS="2.7.13 3.4.4 3.5.3 3.6.1"
+    #     - |
+    #       for PYTHON_VERSION in $PYTHON_VERSIONS; do
+    #         echo "=== Setting up Python $PYTHON_VERSION ==="
+
+    #         curl -L -o /tmp/Python.pkg "https://www.python.org/ftp/python/$PYTHON_VERSION/python-$PYTHON_VERSION-macosx10.6.pkg"
+    #         sudo installer -pkg /tmp/Python.pkg -target /
+
+    #         SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
+    #         PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
+
+    #         echo $SHORT_PYTHON_VERSION
+    #         echo $PYBIN
+    #         if [ ${PYTHON_VERSION%.*.*} == "3" ]; then
+    #           ln -s "$PYBIN/python3" "$PYBIN/python"
+    #           ln -s "$PYBIN/pip3" "$PYBIN/pip"
+    #         fi
+    #         "$PYBIN/pip" install --upgrade pip
+    #         "$PYBIN/pip" install wheel
+    #         "$PYBIN/pip" install delocate
+    #         echo
+    #       done
+    #   script:
+    #     - |
+    #       for PYTHON_VERSION in $PYTHON_VERSIONS; do
+    #         echo "=== Building wheel for Python $PYTHON_VERSION ==="
+
+    #         SHORT_PYTHON_VERSION=${PYTHON_VERSION%.*}
+    #         PYBIN="/Library/Frameworks/Python.framework/Versions/$SHORT_PYTHON_VERSION/bin"
+
+    #         echo $SHORT_PYTHON_VERSION
+    #         echo $PYBIN
+    #         "$PYBIN/python" --version
+    #         "$PYBIN/python" setup.py bdist_wheel -d tmp
+    #         "$PYBIN/delocate-listdeps" tmp/*.whl
+    #         "$PYBIN/delocate-wheel" -w wheelhouse tmp/*.whl
+    #         rm tmp/*.whl
+    #         echo
+    #       done
+    #   before_deploy: *before_deploy-wheels
+    #   deploy: *deploy-wheels
+    #   after_deploy: *after_deploy-wheels
 
 before_install:
   - set -e
